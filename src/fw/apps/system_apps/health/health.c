@@ -29,6 +29,7 @@
 #include "services/normal/activity/activity_private.h"
 #include "services/normal/timeline/timeline.h"
 #include "system/logging.h"
+#include "shell/prefs.h"
 
 // Health app versions
 // 0: Invalid (app was never opened)
@@ -161,7 +162,8 @@ const PebbleProcessMd *health_app_get_info(void) {
       .main_func = &prv_main,
       .uuid = UUID_HEALTH_DATA_SOURCE,
 #if CAPABILITY_HAS_CORE_NAVIGATION4
-      .visibility = ProcessVisibilityHidden,
+      .visibility = (timeline_prefs_get_action_up() != TimelineActionUp_Health) ? ProcessVisibilityShown: 
+                                                                                  ProcessVisibilityHidden,
 #endif
     },
     .name = i18n_noop("Health"),
