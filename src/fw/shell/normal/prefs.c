@@ -178,6 +178,9 @@ static uint16_t s_timeline_peek_before_time_m =
     (TIMELINE_PEEK_DEFAULT_SHOW_BEFORE_TIME_S / SECONDS_PER_MINUTE);
 #endif
 
+#define PREF_KEY_TIMELINE_ACTION_UP "timelineActionUp"
+static uint8_t s_timeline_action_up = TimelineActionUp_Health;
+
 // ============================================================================================
 // Handlers for each pref that validate the new setting and store the new value in our globals.
 // This handler will be called when the setting is changed from inside the firmware using one of
@@ -432,6 +435,15 @@ static bool prv_set_s_timeline_peek_before_time_m(uint16_t *before_time_m) {
   return true;
 }
 #endif
+
+static bool prv_set_s_timeline_action_up(uint8_t *new_action) {
+  if (*new_action >= TimelineActionUpCount) {
+    s_timeline_action_up = TimelineActionUp_Health;
+    return false;
+  }
+  s_timeline_action_up = *new_action;
+  return true;
+};
 
 // ------------------------------------------------------------------------------------
 // Table of all prefs
@@ -1176,3 +1188,12 @@ uint16_t timeline_peek_prefs_get_before_time(void) {
   return TIMELINE_PEEK_DEFAULT_SHOW_BEFORE_TIME_S;
 }
 #endif
+
+TimelineActionUp timeline_prefs_get_action_up(void) {
+  return s_timeline_action_up;
+}
+
+void timeline_prefs_set_action_up(TimelineActionUp new_action) {
+  uint8_t uint_new_action = new_action;
+  prv_pref_set(PREF_KEY_TIMELINE_ACTION_UP, &uint_new_action, sizeof(uint_new_action));
+}

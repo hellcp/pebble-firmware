@@ -115,3 +115,13 @@ void timeline_peek_prefs_set_enabled(bool enabled);
 bool timeline_peek_prefs_get_enabled(void);
 void timeline_peek_prefs_set_before_time(uint16_t before_time_m);
 uint16_t timeline_peek_prefs_get_before_time(void);
+// Preferences for choosing the action performed on up button press on the watchface
+typedef enum TimelineActionUp {
+  TimelineActionUp_Disabled,
+  TimelineActionUp_Health,
+  TimelineActionUp_TimelinePast,
+  TimelineActionUpCount
+} TimelineActionUp;
+
+ActionUp timeline_prefs_get_action_up(void);
+void timeline_prefs_set_action_up(ActionUp newAction);

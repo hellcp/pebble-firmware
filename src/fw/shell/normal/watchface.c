@@ -34,6 +34,7 @@
 #include "services/normal/notifications/do_not_disturb.h"
 #include "system/logging.h"
 #include "system/passert.h"
+#include "shell/prefs.h"
 
 #define QUICK_LAUNCH_HOLD_MS (400)
 
@@ -131,7 +132,14 @@ static void prv_launch_health_app(ClickRecognizerRef recognizer, void *data) {
 
 static ClickHandler prv_get_up_click_handler(void) {
 #if CAPABILITY_HAS_CORE_NAVIGATION4
-  return prv_launch_health_app;
+  switch (timeline_prefs_get_action_up()) {
+    case TimelineActionUp_Health
+      return prv_launch_health_app;
+    case TimelineActionUp_TimelinePast
+      return prv_launch_timeline;
+    default:
+      break;
+  }
 #else
   return prv_launch_timeline;
 #endif // CAPABILITY_HAS_CORE_NAVIGATION4

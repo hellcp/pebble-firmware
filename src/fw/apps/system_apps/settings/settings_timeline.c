@@ -28,7 +28,6 @@
 #include "system/passert.h"
 #include "util/size.h"
 
-#if CAPABILITY_HAS_TIMELINE_PEEK
 typedef enum TimelineSettingsVersion {
   //! Initial version or never opened
   TimelineSettingsVersion_InitialVersion = 0,
@@ -41,19 +40,52 @@ typedef enum TimelineSettingsVersion {
   TimelineSettingsVersionCurrent = TimelineSettingsVersionCount - 1,
 } TimelineSettingsVersion;
 
-typedef struct SettingsTimelinePeekData {
+typedef struct SettingsTimelineData {
   SettingsCallbacks callbacks;
   GFont info_font;
-} SettingsTimelinePeekData;
+} SettingsTimelineData;
 
-typedef enum TimelinePeekMenuIndex {
-  TimelinePeekMenuIndex_Toggle,
-  TimelinePeekMenuIndex_Timing,
+typedef enum TimelineMenuIndex {
+  TimelineMenuIndex_ActionUp,
+#if CAPABILITY_HAS_TIMELINE_PEEK
+  TimelineMenuIndex_PeekToggle,
+  TimelineMenuIndex_PeekTiming,
+#endif
 
-  TimelinePeekMenuIndexCount,
-  TimelinePeekMenuIndexEnabledCount = TimelinePeekMenuIndexCount,
-  TimelinePeekMenuIndexDisabledCount = (TimelinePeekMenuIndex_Toggle + 1),
-} TimelinePeekMenuIndex;
+  TimelineMenuIndexCount,
+#if CAPABILITY_HAS_TIMELINE_PEEK
+  TimelineMenuIndexPeekEnabledCount = TimelineMenuIndexCount,
+  TimelineMenuIndexPeekDisabledCount = (TimelineMenuIndex_PeekToggle + 1),
+#endif
+} TimelineMenuIndex;
+
+static const char *s_action_up_strings[TimelineActionUpCount] = {
+  /// Shows up in the Timeline settings as a "Action Up" subtitle and submenu option.
+  i18n_noop("Disabled"),
+  /// Shows up in the Timeline settings as a "Action Up" subtitle and submenu option.
+  i18n_noop("Pebble Health"),
+  /// Shows up in the Timeline settings as a "Action Up" subtitle and submenu option.
+  i18n_noop("Timeline Past"),
+};
+
+static void prv_action_up_menu_select(OptionMenu *option_menu, int selection, void *context) {
+  timeline_prefs_set_action_up(selection);
+  app_window_stack_remove(&option_menu->window, true /* animated */);
+}
+
+static void prv_push_action_up_menu(SettingsTimelineData *data) {
+  /// Shows up in the Timeline settings as the title for the "Action Up" submenu window.
+  const char *title = i18n_noop("Action Up");
+  const int selected = timeline_prefs_get_action_up();
+  const OptionMenuCallbacks callbacks = {
+    .select = prv_action_up_menu_select,
+  };
+  settings_option_menu_push(
+      title, OptionMenuContentType_SingleLine, selected, &callbacks,
+      ARRAY_LENGTH(s_action_up_strings), true /* icons_enabled */, s_action_up_strings, data);
+}
+
+#if CAPABILITY_HAS_TIMELINE_PEEK
 
 typedef enum PeekBeforeTimingMenuIndex {
   PeekBeforeTimingMenuIndex_StartTime,
@@ -103,7 +135,7 @@ static void prv_before_time_menu_select(OptionMenu *option_menu, int selection, 
   app_window_stack_remove(&option_menu->window, true /* animated */);
 }
 
-static void prv_push_before_time_menu(SettingsTimelinePeekData *data) {
+static void prv_push_before_time_menu(SettingsTimelineData *data) {
   /// Shows up in the Timeline settings as the title for the "Timing" submenu window.
   const char *title = i18n_noop("Timing");
   const int selected = prv_before_time_min_to_index(timeline_peek_prefs_get_before_time());
@@ -115,24 +147,38 @@ static void prv_push_before_time_menu(SettingsTimelinePeekData *data) {
       ARRAY_LENGTH(s_before_time_strings), true /* icons_enabled */, s_before_time_strings, data);
 }
 
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
+
 static void prv_deinit_cb(SettingsCallbacks *context) {
   i18n_free_all(context);
   app_free(context);
 }
 
 static uint16_t prv_num_rows_cb(SettingsCallbacks *context) {
-  return timeline_peek_prefs_get_enabled() ? TimelinePeekMenuIndexEnabledCount :
-                                             TimelinePeekMenuIndexDisabledCount;
+#if CAPABILITY_HAS_TIMELINE_PEEK
+  return timeline_peek_prefs_get_enabled() ? TimelineMenuIndexPeekEnabledCount :
+                                             TimelineMenuIndexPeekDisabledCount;
+#else
+  return TimelineMenuIndexCount;
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
 }
 
 static void prv_draw_row_cb(SettingsCallbacks *context, GContext *ctx,
                             const Layer *cell_layer, uint16_t row, bool selected) {
-  SettingsTimelinePeekData *data = (SettingsTimelinePeekData *)context;
+  SettingsTimelineData *data = (SettingsTimelineData *)context;
   const char *title = NULL;
   const char *subtitle = NULL;
 
-  switch ((TimelinePeekMenuIndex)row) {
-    case TimelinePeekMenuIndex_Toggle:
+
+  switch ((TimelineMenuIndex)row) {
+    case TimelineMenuIndex_ActionUp:
+      /// Shows up in the Timeline settings as the title for the menu item that controls the
+      /// action when pressing the button up on the watchface.
+      title = i18n_noop("Action Up");
+      subtitle = s_action_up_strings[timeline_prefs_get_action_up()];
+      break;
+#if CAPABILITY_HAS_TIMELINE_PEEK
+    case TimelineMenuIndex_PeekToggle:
       /// Shows up in the Timeline settings as a toggle-able "Quick View" item.
       title = i18n_noop("Quick View");
       /// Shows up in the Timeline settings as the status under the "Quick View" toggle.
@@ -140,15 +186,16 @@ static void prv_draw_row_cb(SettingsCallbacks *context, GContext *ctx,
       /// Shows up in the Timeline settings as the status under the "Quick View" toggle.
                                                      i18n_noop("Off");
       break;
-    case TimelinePeekMenuIndex_Timing:
+    case TimelineMenuIndex_PeekTiming:
       /// Shows up in the Timeline settings as the title for the menu item that controls the
       /// timing for when to begin showing the peek for an event.
       title = i18n_noop("Timing");
       subtitle = s_before_time_strings[
           prv_before_time_min_to_index(timeline_peek_prefs_get_before_time())];
       break;
-    case TimelinePeekMenuIndexCount:
+    case TimelineMenuIndexCount:
       break;
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
   }
 
   PBL_ASSERTN(title);
@@ -156,15 +203,20 @@ static void prv_draw_row_cb(SettingsCallbacks *context, GContext *ctx,
 }
 
 static void prv_select_click_cb(SettingsCallbacks *context, uint16_t row) {
-  SettingsTimelinePeekData *data = (SettingsTimelinePeekData *)context;
-  switch ((TimelinePeekMenuIndex)row) {
-    case TimelinePeekMenuIndex_Toggle:
+  SettingsTimelineData *data = (SettingsTimelineData *)context;
+  switch ((TimelineMenuIndex)row) {
+    case TimelineMenuIndex_ActionUp:
+      prv_push_action_up_menu(data);
+      goto done;
+#if CAPABILITY_HAS_TIMELINE_PEEK
+    case TimelineMenuIndex_PeekToggle:
       timeline_peek_prefs_set_enabled(!timeline_peek_prefs_get_enabled());
       goto done;
-    case TimelinePeekMenuIndex_Timing:
+    case TimelineMenuIndex_PeekTiming:
       prv_push_before_time_menu(data);
       goto done;
-    case TimelinePeekMenuIndexCount:
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
+    case TimelineMenuIndexCount:
       break;
   }
   WTF;
@@ -173,9 +225,9 @@ done:
 }
 
 static Window *prv_create_settings_window(void) {
-  SettingsTimelinePeekData *data = app_malloc_check(sizeof(*data));
+  SettingsTimelineData *data = app_malloc_check(sizeof(*data));
 
-  *data = (SettingsTimelinePeekData) {
+  *data = (SettingsTimelineData) {
     .callbacks = {
       .deinit = prv_deinit_cb,
       .draw_row = prv_draw_row_cb,
@@ -195,6 +247,7 @@ static void prv_push_settings_window(ClickRecognizerRef recognizer, void *contex
   app_window_stack_push(window, true /* animated */);
 }
 
+#if CAPABILITY_HAS_TIMELINE_PEEK
 static Window *prv_create_first_use_dialog(void) {
   const void *i18n_owner = prv_create_first_use_dialog; // Use this function as the i18n owner
   /// Title for the Timeline Quick View first use dialog.
@@ -214,15 +267,20 @@ static Window *prv_create_first_use_dialog(void) {
   i18n_free_all(i18n_owner);
   return &expandable_dialog->dialog.window;
 }
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
 
 static Window *prv_init(void) {
   const uint32_t version = timeline_prefs_get_settings_opened();
   timeline_prefs_set_settings_opened(TimelineSettingsVersionCurrent);
+#if CAPABILITY_HAS_TIMELINE_PEEK
   if (version == TimelineSettingsVersion_InitialVersion) {
     return prv_create_first_use_dialog();
   } else {
     return prv_create_settings_window();
   }
+#else
+  return prv_create_settings_window();
+#endif // CAPABILITY_HAS_TIMELINE_PEEK
 }
 
 const SettingsModuleMetadata *settings_timeline_get_info(void) {
@@ -233,4 +291,3 @@ const SettingsModuleMetadata *settings_timeline_get_info(void) {
 
   return &s_module_info;
 }
-#endif // CAPABILITY_HAS_TIMELINE_PEEK
