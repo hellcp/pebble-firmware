@@ -1,0 +1,52 @@
+name: Upload Translations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'resources/normal/base/lang/**/*'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        board: ['snowy_s3', 'snowy_dvt', 'spalding', 'silk', 'silk_evt', 'asterix']
+
+    container:
+      image: ghcr.io/pebble-dev/pebbleos-docker:v1
+
+    steps:
+      - name: Mark Github workspace as safe
+        run: git config --system --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Install Python dependencies
+        run: |
+          pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Configure
+        run: ./waf configure --board ${{ matrix.board }}
+
+      - name: Build
+        run: ./waf pack_all_langs
+
+      - name: Upload pbls to lp.rebble.io
+        run: |
+          for pbl in build/resources/normal/base/lang/**/*.pbl; do
+            curl -X PUT -F "file=@$pbl" -F "locale=$(basename $pbl .pbl)" \
+              -F "hardware=$BOARD" -F "firmware=$FIRMWARE" \
+              -H "Authorization: Bearer $RWS_LP_SECRET" \
+              https://lp.rebble.io/v1/languages/submit;
+          done
+        env:
+          RWS_LP_SECRET: ${{ secrets.RWS_LP_SECRET }}
+          BOARD: ${{ matrix.board }}
+          # Hardcoded for now, should be the current firmware version
+          FIRMWARE: 4.4.0
